@@ -12,6 +12,7 @@ import cv2
 import dlib
 import numpy as np
 import matplotlib.pyplot as plt
+from utils import *
 
 parser = argparse.ArgumentParser(description='Test Generator Model')
 parser.add_argument('--test-images-dir',type=str,default='/home/yui/Documents/projects/cv/stargan/test/images')
@@ -26,8 +27,26 @@ class testDataset(data.Dataset):
         self.imagePaths = list(paths.list_images(self.image_dir))
         self.set_attrs = set_attrs
         self.transform = transform
-    def __getitem__(self,idx):
+    def preprocess(self,img):
+        pp = preprocess(img)
+        faces = pp.faceDetect()
+        if len(faces) > 1:
+            for (x,y,w,h) in faces:
+                tmpimg = img[y:y+h,x:x+w,:].copy()
+                skinMask = pp.skinMask(img=tmpimg[:,:,::-1],mode='ycrcb')
+                pixgreater0 = np.prod((skinMask)>0,axis=2)
+                totalgt0 = np.sum(pixgreater0)
+                ratio = totalgt0/np.prod(pixgreater0.shape)
+                ret = (ratio>.4)
+        else:
+            (x,y,w,h) = faces[0]
+            tmpimg = img[y:y+h,x:x+w,:].copy()
+        return tmpimg,(x,y,w,h)
+    def __getitem__(self,idx,preprocess=False):
         image = io.imread(self.imagePaths[idx])
+        if preprocess:
+            image,face = self.preprocess(image)
+            print(face)
         image = Image.fromarray(image)
         label = list(map(float,self.set_attrs))
         return self.transform(image),torch.FloatTensor(label)
@@ -65,8 +84,6 @@ def main():
             result = generator(image.cuda(),label.cuda())   
         result = denorm(result.data.cpu()).numpy().squeeze()
         result = np.transpose(result,(1,2,0))
-        print(result.shape)
-        print(np.max(result),np.min(result))
     plt.imshow(result)
     plt.show()
 
