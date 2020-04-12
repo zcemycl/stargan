@@ -44,12 +44,13 @@ class testDataset(data.Dataset):
         return tmpimg,(x,y,w,h)
     def __getitem__(self,idx,preprocess=False):
         image = io.imread(self.imagePaths[idx])
+        w,h = image.shape[:2]
         if preprocess:
             image,face = self.preprocess(image)
             print(face)
         image = Image.fromarray(image)
         label = list(map(float,self.set_attrs))
-        return self.transform(image),torch.FloatTensor(label)
+        return self.transform(image),torch.FloatTensor(label),w,h
     def __len__(self):
         return len(self.imagePaths)
 
@@ -79,12 +80,14 @@ def main():
     dataset = testDataset(args.test_images_dir,args.set_attributes,transform)
     data_loader = data.DataLoader(dataset=dataset,batch_size=16,
             shuffle=False,num_workers=1)
-    for (i,(image,label)) in enumerate(data_loader):
+    for (i,(image,label,w,h)) in enumerate(data_loader):
         with torch.no_grad():
             result = generator(image.cuda(),label.cuda())   
         result = denorm(result.data.cpu()).numpy().squeeze()
         result = np.transpose(result,(1,2,0))
+        result = cv2.resize(result,(int(h/2),int(w/2)))
     plt.imshow(result)
+    plt.axis('off')
     plt.show()
 
 if __name__ == '__main__':
